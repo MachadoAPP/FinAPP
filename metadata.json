@@ -1,0 +1,6 @@
+{
+  "name": "FinControl",
+  "description": "Gestor financiero personal privado y local para el control de deudas, cuotas de préstamos, metas de ahorro con propósitos personalizados, simulador de crédito y gastos diarios.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
