@@ -3,6 +3,21 @@ import { useFinancial } from '../../context/FinancialContext';
 import { ExpenseCategory, PaymentMethod } from '../../types';
 import { formatCOP } from '../../utils/finance';
 
+const MESES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+
+// Color de cada categoria en la barra de distribucion
+const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
+  'Alimentación': '#006c49',
+  'Transporte': '#565e74',
+  'Hogar': '#131b2e',
+  'Salud': '#4edea3',
+  'Ocio': '#7073ff',
+  'Otros': '#c6c6cd',
+};
+
 export const GastosScreen: React.FC = () => {
   const {
     expenses,
@@ -40,6 +55,13 @@ export const GastosScreen: React.FC = () => {
     setConceptInput('');
   };
 
+  // Fechas reales (mes actual, hoy y ayer)
+  const now = new Date();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  const monthLabel = `${MESES[now.getMonth()]} ${now.getFullYear()}`;
+  const todayLabel = `Hoy, ${now.getDate()} ${MESES[now.getMonth()]}`;
+  const yesterdayLabel = `Ayer, ${yesterday.getDate()} ${MESES[yesterday.getMonth()]}`;
+
   // Grouped expenses
   const todayExpenses = expenses.filter((e) => e.dateGroup === 'hoy');
   const yesterdayExpenses = expenses.filter((e) => e.dateGroup === 'ayer');
@@ -59,9 +81,25 @@ export const GastosScreen: React.FC = () => {
     { label: 'Otros', cat: 'Otros' as ExpenseCategory, icon: 'category' },
   ];
 
+  // Distribucion real: solo categorias con gastos, con su porcentaje sobre el total
+  const distribution = categoriesConfig
+    .map((c) => {
+      const amount = expenses.reduce(
+        (sum, e) => sum + (e.active && e.category === c.cat ? e.amount : 0),
+        0
+      );
+      return {
+        label: c.label,
+        color: CATEGORY_COLORS[c.cat],
+        amount,
+        pct: totalAllExpenses > 0 ? (amount / totalAllExpenses) * 100 : 0,
+      };
+    })
+    .filter((c) => c.amount > 0);
+
   return (
     <div className="flex flex-col w-full pb-10 space-y-4">
-      {/* Banner Estado & Presupuesto */}
+      {/* Banner Estado */}
       <section className="bg-[#ffffff] p-4 rounded-2xl shadow-sm space-y-2 border border-[#c6c6cd]/20">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-1.5">
@@ -71,11 +109,11 @@ export const GastosScreen: React.FC = () => {
             </span>
           </div>
           <span className="text-xs bg-[#e5eeff] text-[#0b1c30] px-2.5 py-0.5 rounded-full font-bold">
-            Octubre 2024
+            {monthLabel}
           </span>
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5 pt-1">
+        <div className="grid grid-cols-1 gap-2.5 pt-1">
           <div className="bg-[#eff4ff] p-3 rounded-xl flex flex-col justify-between">
             <span className="text-xs text-[#45464d] flex items-center gap-1 font-medium">
               <span className="material-symbols-outlined text-[15px] text-[#ba1a1a]">trending_down</span>
@@ -88,19 +126,6 @@ export const GastosScreen: React.FC = () => {
               <span className="block text-[11px] text-[#45464d]">
                 {todayExpenses.length} transacciones
               </span>
-            </div>
-          </div>
-
-          <div className="bg-[#6ffbbe]/30 p-3 rounded-xl flex flex-col justify-between border border-[#6cf8bb]/30">
-            <span className="text-xs text-[#005236] flex items-center gap-1 font-semibold">
-              <span className="material-symbols-outlined text-[15px] text-[#006c49]">account_balance_wallet</span>
-              Cupo mes
-            </span>
-            <div className="mt-1">
-              <span className="text-lg font-extrabold text-[#002113] tracking-tight">
-                $1.150.000
-              </span>
-              <span className="block text-[11px] text-[#006c49] font-bold">78% disponible</span>
             </div>
           </div>
         </div>
@@ -247,52 +272,48 @@ export const GastosScreen: React.FC = () => {
             <span>Distribución del Mes</span>
           </h3>
           <span className="text-xs text-[#45464d] font-medium">
-            {formatCOP(totalAllExpenses || 620000)} acumulado
+            {formatCOP(totalAllExpenses)} acumulado
           </span>
         </div>
 
-        {/* Barra porcentual segmentada */}
+        {/* Barra porcentual segmentada (real) */}
         <div className="w-full h-3.5 bg-[#eff4ff] rounded-full overflow-hidden flex shadow-inner">
-          <div className="bg-[#006c49] h-full transition-all" style={{ width: '42%' }}></div>
-          <div className="bg-[#565e74] h-full transition-all" style={{ width: '28%' }}></div>
-          <div className="bg-[#131b2e] h-full transition-all" style={{ width: '18%' }}></div>
-          <div className="bg-[#c6c6cd] h-full transition-all" style={{ width: '12%' }}></div>
+          {distribution.map((item) => (
+            <div
+              key={item.label}
+              className="h-full transition-all"
+              style={{ width: `${item.pct}%`, backgroundColor: item.color }}
+            ></div>
+          ))}
         </div>
 
-        {/* Leyenda de Categorías */}
-        <div className="grid grid-cols-2 gap-2 pt-1">
-          <div className="flex items-center space-x-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#006c49] flex-shrink-0"></span>
-            <span className="text-xs text-[#0b1c30]">
-              Alimentos <strong className="text-[#0b1c30]">42%</strong>
-            </span>
+        {/* Leyenda de Categorías (real) */}
+        {distribution.length > 0 ? (
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            {distribution.map((item) => (
+              <div key={item.label} className="flex items-center space-x-2">
+                <span
+                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: item.color }}
+                ></span>
+                <span className="text-xs text-[#0b1c30]">
+                  {item.label} <strong className="text-[#0b1c30]">{Math.round(item.pct)}%</strong>
+                </span>
+              </div>
+            ))}
           </div>
-          <div className="flex items-center space-x-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#565e74] flex-shrink-0"></span>
-            <span className="text-xs text-[#0b1c30]">
-              Servicios <strong className="text-[#0b1c30]">28%</strong>
-            </span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#131b2e] flex-shrink-0"></span>
-            <span className="text-xs text-[#0b1c30]">
-              Transporte <strong className="text-[#0b1c30]">18%</strong>
-            </span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#c6c6cd] flex-shrink-0"></span>
-            <span className="text-xs text-[#0b1c30]">
-              Otros <strong className="text-[#0b1c30]">12%</strong>
-            </span>
-          </div>
-        </div>
+        ) : (
+          <p className="text-xs text-[#45464d] pt-1">
+            Aún no hay gastos. Cuando registres el primero, verás aquí cómo se reparte.
+          </p>
+        )}
       </section>
 
       {/* Feed Cronológico de Gastos */}
       <section className="space-y-3">
         <div className="flex items-center justify-between px-1">
           <h3 className="font-bold text-sm text-[#0b1c30]">Movimientos Recientes</h3>
-          <span className="text-xs text-[#006c49] font-bold">Historial encriptado</span>
+          <span className="text-xs text-[#006c49] font-bold">Guardado en este dispositivo</span>
         </div>
 
         <div className="space-y-3">
@@ -300,10 +321,14 @@ export const GastosScreen: React.FC = () => {
           <div className="space-y-2">
             <div className="flex items-center justify-between px-1">
               <span className="text-[11px] text-[#45464d] font-extrabold uppercase tracking-wider">
-                Hoy, 24 Octubre
+                {todayLabel}
               </span>
               <span className="text-xs font-bold text-[#0b1c30]">{formatCOP(todaySum)}</span>
             </div>
+
+            {todayExpenses.length === 0 && (
+              <p className="text-xs text-[#45464d] px-1">Aún no has registrado gastos hoy.</p>
+            )}
 
             {todayExpenses.map((exp) => (
               <div
@@ -355,7 +380,7 @@ export const GastosScreen: React.FC = () => {
             <div className="space-y-2 pt-2">
               <div className="flex items-center justify-between px-1">
                 <span className="text-[11px] text-[#45464d] font-extrabold uppercase tracking-wider">
-                  Ayer, 23 Octubre
+                  {yesterdayLabel}
                 </span>
                 <span className="text-xs font-bold text-[#45464d]">{formatCOP(yesterdaySum)}</span>
               </div>
