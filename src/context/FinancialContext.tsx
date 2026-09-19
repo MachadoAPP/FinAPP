@@ -12,6 +12,7 @@ interface FinancialContextType {
   currentTab: TabType;
   setCurrentTab: (tab: TabType) => void;
   balance: number;
+  setBalance: (value: number) => void;
   porPagarMes: number;
   gastosHoyTotal: number;
   pagadoMes: number;
@@ -69,295 +70,24 @@ interface FinancialContextType {
   triggerConfetti: (targetElem?: HTMLElement | null) => void;
 }
 
-const STORAGE_KEY = 'fincontrol_local_vault_v3';
+// Version nueva de la llave: los datos de demostracion guardados antes (v3)
+// se ignoran y se borran, asi la app arranca vacia en cualquier dispositivo.
+const STORAGE_KEY = 'fincontrol_local_vault_v4';
+const OLD_STORAGE_KEY = 'fincontrol_local_vault_v3';
 
-const INITIAL_DEBTS: CuotaObligacion[] = [
-  {
-    id: 'bancolombia-libre',
-    name: 'Crédito de Libre Inversión',
-    entity: 'Bancolombia',
-    rateInfo: 'Tasa 1.6% M.V.',
-    icon: 'assured_workload',
-    currentInstallment: 13,
-    totalInstallments: 36,
-    installmentAmount: 380000,
-    initialAmount: 10000000,
-    remainingBalance: 6700000,
-    amortizedPct: 33,
-    dueDate: '28 de Octubre',
-    dueDaysNotice: 'En 3 días',
-    dueDaysCount: 3,
-    paymentWindowNotice: 'Habilitado para pagar del 25 al 30 de cada mes',
-    status: 'active',
-    isWindowActive: true,
-    paidThisMonth: false,
-    ruleDaysBefore: 5,
-  },
-  {
-    id: 'bancolombia-prestamo',
-    name: 'Préstamo Bancolombia',
-    entity: 'Bancolombia',
-    rateInfo: 'Cuota fija mensual',
-    icon: 'account_balance',
-    currentInstallment: 8,
-    totalInstallments: 24,
-    installmentAmount: 245000,
-    initialAmount: 5880000,
-    remainingBalance: 3920000,
-    amortizedPct: 33.3,
-    dueDate: '28 de Octubre',
-    dueDaysNotice: 'En 3 días',
-    dueDaysCount: 3,
-    paymentWindowNotice: 'Habilitado para pagar del 23 al 28 de cada mes',
-    status: 'active',
-    isWindowActive: true,
-    paidThisMonth: false,
-    ruleDaysBefore: 5,
-  },
-  {
-    id: 'visa-clasica',
-    name: 'Tarjeta Visa Clásica',
-    entity: 'Banco de Bogotá',
-    rateInfo: 'Pago Mínimo del Mes',
-    icon: 'credit_card',
-    currentInstallment: 1,
-    totalInstallments: 1,
-    installmentAmount: 120000,
-    initialAmount: 120000,
-    remainingBalance: 120000,
-    amortizedPct: 0,
-    dueDate: '31 de Octubre',
-    dueDaysNotice: 'En 6 días',
-    dueDaysCount: 6,
-    paymentWindowNotice: 'Habilitado para pagar del 25 al 31 de cada mes',
-    status: 'active',
-    isWindowActive: true,
-    paidThisMonth: false,
-    ruleDaysBefore: 5,
-  },
-  {
-    id: 'prestamo-vehicular',
-    name: 'Préstamo Vehicular',
-    entity: 'Banco de Occidente • Plazo 48M',
-    rateInfo: 'Tasa 1.2% M.V.',
-    icon: 'directions_car',
-    currentInstallment: 20,
-    totalInstallments: 48,
-    installmentAmount: 520000,
-    initialAmount: 24960000,
-    remainingBalance: 14560000,
-    amortizedPct: 41.6,
-    dueDate: '10 de Noviembre',
-    dueDaysNotice: 'Faltan 9 días',
-    dueDaysCount: 9,
-    paymentWindowNotice: 'Próxima cuota se habilita el 05 Nov (Faltan 9 días)',
-    status: 'waiting',
-    isWindowActive: false,
-    paidThisMonth: false,
-    ruleDaysBefore: 5,
-  },
-  {
-    id: 'electrodomestico-falabella',
-    name: 'Electrodoméstico Falabella',
-    entity: 'Tarjeta CMR • Cero Interés',
-    rateInfo: 'Cuotas sin interés',
-    icon: 'tv',
-    currentInstallment: 5,
-    totalInstallments: 6,
-    installmentAmount: 85000,
-    initialAmount: 510000,
-    remainingBalance: 85000,
-    amortizedPct: 83.3,
-    dueDate: '15 de Octubre',
-    dueDaysNotice: 'Al día',
-    dueDaysCount: 0,
-    paymentWindowNotice: 'Ciclo cerrado',
-    status: 'up-to-date',
-    isWindowActive: false,
-    paidThisMonth: true,
-    paidDate: '15 Oct',
-    paidAmount: 85000,
-    ruleDaysBefore: 5,
-  },
-];
-
-const INITIAL_SERVICIOS: ServicioPublico[] = [
-  {
-    id: 'agua',
-    name: 'Agua y Alcantarillado',
-    proveedor: 'EPM / Acueducto',
-    icon: 'water_drop',
-    amount: 68000,
-    dueDate: '25 de Octubre',
-    dueDaysNotice: 'En 1 día',
-    paid: false,
-  },
-  {
-    id: 'energia',
-    name: 'Energía Eléctrica',
-    proveedor: 'Codensa / Enel',
-    icon: 'bolt',
-    amount: 94000,
-    dueDate: '27 de Octubre',
-    dueDaysNotice: 'En 3 días',
-    paid: false,
-  },
-  {
-    id: 'gas',
-    name: 'Gas Natural',
-    proveedor: 'Vanti Gas Natural',
-    icon: 'mode_heat',
-    amount: 32000,
-    dueDate: '29 de Octubre',
-    dueDaysNotice: 'En 5 días',
-    paid: false,
-  },
-  {
-    id: 'internet',
-    name: 'Internet Fibra Óptica',
-    proveedor: 'Claro Hogar 300MB',
-    icon: 'wifi',
-    amount: 89900,
-    dueDate: '02 de Noviembre',
-    dueDaysNotice: 'En 9 días',
-    paid: false,
-  },
-  {
-    id: 'movil',
-    name: 'Plan Móvil Pospago',
-    proveedor: 'Tigo Ilimitado',
-    icon: 'smartphone',
-    amount: 45000,
-    dueDate: '05 de Noviembre',
-    dueDaysNotice: 'En 12 días',
-    paid: false,
-  },
-];
-
-const INITIAL_EXPENSES: GastoItem[] = [
-  {
-    id: 'exp-1',
-    concept: 'Supermercado Éxito',
-    category: 'Alimentación',
-    categoryIcon: 'shopping_cart',
-    amount: 22000,
-    paymentMethod: 'debit',
-    dateGroup: 'hoy',
-    timeStr: '11:20 AM',
-    detail: 'Víveres del hogar',
-    active: true,
-  },
-  {
-    id: 'exp-2',
-    concept: 'Café de la Mañana',
-    category: 'Alimentación',
-    categoryIcon: 'local_cafe',
-    amount: 4500,
-    paymentMethod: 'cash',
-    dateGroup: 'hoy',
-    timeStr: '08:15 AM',
-    detail: 'Gasto personal',
-    active: true,
-  },
-  {
-    id: 'exp-3',
-    concept: 'Transporte Metro',
-    category: 'Transporte',
-    categoryIcon: 'directions_subway',
-    amount: 8000,
-    paymentMethod: 'cash',
-    dateGroup: 'hoy',
-    timeStr: '07:45 AM',
-    detail: 'Recarga tarjeta cívica',
-    active: true,
-  },
-  {
-    id: 'exp-4',
-    concept: 'Supermercado Líder',
-    category: 'Hogar',
-    categoryIcon: 'shopping_cart',
-    amount: 52400,
-    paymentMethod: 'debit',
-    dateGroup: 'ayer',
-    timeStr: '19:10 PM',
-    detail: 'Débito Banco',
-    active: true,
-  },
-  {
-    id: 'exp-5',
-    concept: 'Carga Tarjeta Metro',
-    category: 'Transporte',
-    categoryIcon: 'directions_subway',
-    amount: 6500,
-    paymentMethod: 'cash',
-    dateGroup: 'ayer',
-    timeStr: '08:05 AM',
-    detail: 'Efectivo',
-    active: true,
-  },
-];
-
-const INITIAL_SAVINGS: AhorroMeta[] = [
-  {
-    id: 'meta-1',
-    title: 'Fondo de Emergencia',
-    purpose: 'Cubrir 3 meses de gastos esenciales ante cualquier eventualidad médica o laboral',
-    targetAmount: 3000000,
-    currentAmount: 1250000,
-    targetDate: '2025-06-30',
-    icon: 'health_and_safety',
-    color: '#006c49',
-    category: 'emergencia',
-    notes: 'Aportar mínimo $200.000 quincenales en cuenta de alto rendimiento.',
-    createdAt: '2024-09-01',
-    history: [
-      { id: 'h-1', amount: 500000, date: '01 Sep', note: 'Aporte inicial', type: 'deposit' },
-      { id: 'h-2', amount: 450000, date: '15 Sep', note: 'Ahorro quincenal', type: 'deposit' },
-      { id: 'h-3', amount: 300000, date: '01 Oct', note: 'Ahorro mensual', type: 'deposit' },
-    ],
-  },
-  {
-    id: 'meta-2',
-    title: 'Vacaciones Fin de Año',
-    purpose: 'Viaje a Santa Marta con tiquetes, hospedaje y tours pagados sin endeudarse',
-    targetAmount: 2200000,
-    currentAmount: 1400000,
-    targetDate: '2024-12-15',
-    icon: 'flight_takeoff',
-    color: '#005236',
-    category: 'viajes',
-    notes: 'Meta al 63%. Falta poco para completar tiquetes.',
-    createdAt: '2024-08-10',
-    history: [
-      { id: 'h-4', amount: 700000, date: '15 Ago', note: 'Primera cuota tiquetes', type: 'deposit' },
-      { id: 'h-5', amount: 700000, date: '30 Sep', note: 'Ahorro hospedaje', type: 'deposit' },
-    ],
-  },
-  {
-    id: 'meta-3',
-    title: 'Nueva Laptop de Trabajo',
-    purpose: 'Renovación de equipo portátil para mayor productividad y rendimiento',
-    targetAmount: 3500000,
-    currentAmount: 850000,
-    targetDate: '2025-04-15',
-    icon: 'laptop_mac',
-    color: '#131b2e',
-    category: 'tecnologia',
-    notes: 'Ahorro programado con aportes de proyectos extra.',
-    createdAt: '2024-10-01',
-    history: [
-      { id: 'h-6', amount: 850000, date: '05 Oct', note: 'Ingreso freelance', type: 'deposit' },
-    ],
-  },
-];
+// Estado inicial: todo en cero, sin datos de ejemplo.
+const INITIAL_DEBTS: CuotaObligacion[] = [];
+const INITIAL_SERVICIOS: ServicioPublico[] = [];
+const INITIAL_EXPENSES: GastoItem[] = [];
+const INITIAL_SAVINGS: AhorroMeta[] = [];
 
 const FinancialContext = createContext<FinancialContextType | undefined>(undefined);
 
 export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentTab, setCurrentTab] = useState<TabType>('inicio');
-  const [balance, setBalance] = useState<number>(1820500);
-  const [pagadoMes, setPagadoMes] = useState<number>(315000);
-  const [compromisoTotal, setCompromisoTotal] = useState<number>(485000);
+  const [balance, setBalance] = useState<number>(0);
+  const [pagadoMes, setPagadoMes] = useState<number>(0);
+  const [compromisoTotal, setCompromisoTotal] = useState<number>(0);
   const [debts, setDebts] = useState<CuotaObligacion[]>(INITIAL_DEBTS);
   const [servicios, setServicios] = useState<ServicioPublico[]>(INITIAL_SERVICIOS);
   const [expenses, setExpenses] = useState<GastoItem[]>(INITIAL_EXPENSES);
@@ -384,6 +114,9 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
   // Load from localStorage on mount
   useEffect(() => {
     try {
+      // Borra los datos de demostracion de la version anterior
+      localStorage.removeItem(OLD_STORAGE_KEY);
+
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -789,10 +522,11 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     );
   };
 
+  // Ahora "restablecer" deja la app completamente vacia (ya no hay datos de demostracion).
   const resetToDefaultState = () => {
-    setBalance(1820500);
-    setPagadoMes(315000);
-    setCompromisoTotal(485000);
+    setBalance(0);
+    setPagadoMes(0);
+    setCompromisoTotal(0);
     setDebts(INITIAL_DEBTS);
     setServicios(INITIAL_SERVICIOS);
     setExpenses(INITIAL_EXPENSES);
@@ -800,7 +534,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     setWindowRuleDays(5);
     setAutoCloseOverdue(true);
     localStorage.removeItem(STORAGE_KEY);
-    showNotification('Datos restablecidos', 'Se han recargado los datos de demostración originales.');
+    showNotification('Datos borrados', 'La app quedó vacía y lista para empezar de nuevo.');
   };
 
   return (
@@ -809,6 +543,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
         currentTab,
         setCurrentTab,
         balance,
+        setBalance,
         porPagarMes,
         gastosHoyTotal,
         pagadoMes,
