@@ -73,11 +73,21 @@ export const InicioScreen: React.FC<InicioScreenProps> = ({ onOpenModal }) => {
           </span>
         </div>
 
-        <div className="flex items-baseline gap-1.5 my-0.5">
-          <span className="text-xl font-bold text-[#6ffbbe]">$</span>
-          <span className="text-[2.25rem] font-extrabold tracking-tight leading-none text-[#ffffff]">
-            {formatCOPPlain(balance)}
-          </span>
+        <div className="flex items-center justify-between gap-2 my-0.5">
+          <div className="flex items-baseline gap-1.5 min-w-0">
+            <span className="text-xl font-bold text-[#6ffbbe]">$</span>
+            <span className="text-[2.25rem] font-extrabold tracking-tight leading-none text-[#ffffff]">
+              {formatCOPPlain(balance)}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpenModal('ajustar-saldo')}
+            className="flex-shrink-0 flex items-center gap-1 bg-[#ffffff]/10 hover:bg-[#ffffff]/20 text-[#ffffff] text-xs font-semibold px-3 py-1.5 rounded-full active:scale-95 transition-all"
+          >
+            <span className="material-symbols-outlined text-[16px] text-[#6ffbbe]">edit</span>
+            <span>Ajustar</span>
+          </button>
         </div>
 
         {/* Dual Mini Metric Display */}
