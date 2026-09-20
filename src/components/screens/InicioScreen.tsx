@@ -22,7 +22,6 @@ export const InicioScreen: React.FC<InicioScreenProps> = ({ onOpenModal }) => {
     servicios,
     expenses,
     markDebtPaid,
-    payService,
     deleteExpense,
     triggerConfetti,
     setCurrentTab,
@@ -279,12 +278,12 @@ export const InicioScreen: React.FC<InicioScreenProps> = ({ onOpenModal }) => {
         })}
       </div>
 
-      {/* Servicios Públicos Section */}
+      {/* Gastos Fijos (servicios públicos, suscripciones...) */}
       <div className="flex flex-col gap-3 mt-1">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <span className="material-symbols-outlined text-[20px] text-[#006c49]">power</span>
-            <h2 className="font-bold text-[1.05rem] text-[#0b1c30]">Servicios Públicos</h2>
+            <span className="material-symbols-outlined text-[20px] text-[#006c49]">event_repeat</span>
+            <h2 className="font-bold text-[1.05rem] text-[#0b1c30]">Gastos Fijos</h2>
           </div>
           <span
             className={`text-xs px-2.5 py-0.5 rounded-full font-bold ${
@@ -293,9 +292,26 @@ export const InicioScreen: React.FC<InicioScreenProps> = ({ onOpenModal }) => {
                 : 'bg-[#6ffbbe]/50 text-[#005236]'
             }`}
           >
-            {pendingServicesCount === 0 ? 'Todos Pagados ✓' : `${pendingServicesCount} pendientes`}
+            {servicios.length === 0
+              ? 'Sin gastos fijos'
+              : pendingServicesCount === 0
+              ? 'Todos Pagados ✓'
+              : `${pendingServicesCount} pendientes`}
           </span>
         </div>
+
+        {servicios.length === 0 && (
+          <div className="bg-[#ffffff] rounded-2xl p-5 text-center text-xs text-[#45464d] border border-[#c6c6cd]/20 space-y-2">
+            <p>Aún no tienes gastos fijos (servicios públicos, suscripciones...).</p>
+            <button
+              type="button"
+              onClick={() => setCurrentTab('gastos')}
+              className="text-[#006c49] font-bold underline"
+            >
+              Agregarlos en Gastos
+            </button>
+          </div>
+        )}
 
         <div className="flex flex-col gap-2.5">
           {servicios.map((serv) => {
@@ -322,7 +338,7 @@ export const InicioScreen: React.FC<InicioScreenProps> = ({ onOpenModal }) => {
                   </div>
 
                   <span className="text-sm font-extrabold text-[#0b1c30]">
-                    {formatCOP(serv.amount)}
+                    {serv.amount > 0 ? formatCOP(serv.amount) : 'Sin valor'}
                   </span>
                 </div>
 
@@ -334,10 +350,7 @@ export const InicioScreen: React.FC<InicioScreenProps> = ({ onOpenModal }) => {
                   <button
                     type="button"
                     disabled={serv.paid}
-                    onClick={(e) => {
-                      triggerConfetti(e.currentTarget);
-                      payService(serv.id);
-                    }}
+                    onClick={() => onOpenModal(`pagar-fijo:${serv.id}`)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
                       serv.paid
                         ? 'bg-[#e5eeff] text-[#006c49]'

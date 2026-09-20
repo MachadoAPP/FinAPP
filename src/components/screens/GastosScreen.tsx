@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useFinancial } from '../../context/FinancialContext';
-import { ExpenseCategory, PaymentMethod } from '../../types';
+import { ExpenseCategory, PaymentMethod, FixedKind } from '../../types';
 import { formatCOP } from '../../utils/finance';
 
 const MESES = [
@@ -18,12 +18,27 @@ const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   'Otros': '#c6c6cd',
 };
 
-export const GastosScreen: React.FC = () => {
+interface GastosScreenProps {
+  onOpenModal: (modalId: string) => void;
+}
+
+// Tipos de gasto fijo (recurrente mensual)
+const KIND_OPTIONS: { id: FixedKind; label: string; icon: string }[] = [
+  { id: 'servicio', label: 'Servicio público', icon: 'bolt' },
+  { id: 'suscripcion', label: 'Suscripción', icon: 'subscriptions' },
+  { id: 'otro', label: 'Otro', icon: 'event_repeat' },
+];
+
+export const GastosScreen: React.FC<GastosScreenProps> = ({ onOpenModal }) => {
   const {
     expenses,
     gastosHoyTotal,
+    servicios,
     addExpense,
+    addFixedExpense,
     deleteExpense,
+    deleteFixedExpense,
+    undoFixedPayment,
     triggerConfetti,
   } = useFinancial();
 
@@ -34,6 +49,11 @@ export const GastosScreen: React.FC = () => {
   const [selectedCategoryIcon, setSelectedCategoryIcon] = useState<string>('restaurant');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>('cash');
 
+  // Gasto recurrente (mensual) o solo esta vez
+  const [isRecurring, setIsRecurring] = useState<boolean>(false);
+  const [recurringKind, setRecurringKind] = useState<FixedKind>('suscripcion');
+  const [dayInput, setDayInput] = useState<string>(String(new Date().getDate()));
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const amountVal = parseFloat(amountInput);
@@ -41,19 +61,46 @@ export const GastosScreen: React.FC = () => {
 
     if (!amountVal || !conceptVal) return;
 
-    addExpense({
-      concept: conceptVal,
-      amount: amountVal,
-      category: selectedCategory,
-      categoryIcon: selectedCategoryIcon,
-      paymentMethod: selectedPaymentMethod,
-      detail: selectedPaymentMethod === 'credit' ? 'T. Crédito' : (selectedPaymentMethod === 'debit' ? 'Débito' : 'Efectivo'),
-    });
+    if (isRecurring) {
+      const day = parseInt(dayInput, 10);
+      if (!(day >= 1 && day <= 31)) {
+        alert('El día de pago debe estar entre 1 y 31.');
+        return;
+      }
+      addFixedExpense({
+        name: conceptVal,
+        kind: recurringKind,
+        amount: amountVal,
+        dueDay: day,
+        paidNow: true,
+        paymentMethod: selectedPaymentMethod,
+      });
+    } else {
+      addExpense({
+        concept: conceptVal,
+        amount: amountVal,
+        category: selectedCategory,
+        categoryIcon: selectedCategoryIcon,
+        paymentMethod: selectedPaymentMethod,
+        detail: selectedPaymentMethod === 'credit' ? 'T. Crédito' : (selectedPaymentMethod === 'debit' ? 'Débito' : 'Efectivo'),
+      });
+    }
 
     triggerConfetti();
     setAmountInput('');
     setConceptInput('');
+    setIsRecurring(false);
   };
+
+  const handleDeleteFixed = (id: string, name: string) => {
+    if (window.confirm(`¿Quitar "${name}" de tus gastos fijos?\n\nDeja de aparecer cada mes. Lo que ya pagaste queda registrado en tus gastos.`)) {
+      deleteFixedExpense(id);
+    }
+  };
+
+  // Gastos fijos: cuánto falta por pagar este mes
+  const fixedPendingTotal = servicios.filter((f) => !f.paid).reduce((sum, f) => sum + f.amount, 0);
+  const fixedPendingCount = servicios.filter((f) => !f.paid).length;
 
   // Fechas reales (mes actual, hoy y ayer)
   const now = new Date();
@@ -156,8 +203,8 @@ export const GastosScreen: React.FC = () => {
               <input
                 type="number"
                 inputMode="numeric"
-                step="100"
-                min="100"
+                step="any"
+                min="1"
                 required
                 placeholder="0"
                 value={amountInput}
@@ -167,7 +214,8 @@ export const GastosScreen: React.FC = () => {
             </div>
           </div>
 
-          {/* Selector de Categorías en Chips */}
+          {/* Selector de Categorías en Chips (solo para gastos de una vez) */}
+          {!isRecurring && (
           <div className="space-y-1.5">
             <span className="text-xs text-[#45464d] font-bold">Categoría</span>
             <div className="grid grid-cols-3 gap-1.5">
@@ -200,6 +248,7 @@ export const GastosScreen: React.FC = () => {
               })}
             </div>
           </div>
+          )}
 
           {/* Concepto / Glosa */}
           <div className="space-y-1">
@@ -217,6 +266,74 @@ export const GastosScreen: React.FC = () => {
                 className="w-full pl-9 pr-3 py-2.5 bg-[#eff4ff] rounded-xl text-[#0b1c30] text-sm focus:bg-[#e5eeff] focus:outline-none border-none"
               />
             </div>
+          </div>
+
+          {/* Frecuencia: solo esta vez o recurrente mensual */}
+          <div className="space-y-1.5">
+            <span className="text-xs text-[#45464d] font-bold">Frecuencia</span>
+            <div className="grid grid-cols-2 gap-1.5 bg-[#eff4ff] p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setIsRecurring(false)}
+                className={`py-2 px-1 rounded-lg text-xs font-bold text-center transition-all ${
+                  !isRecurring ? 'bg-[#ffffff] text-[#0b1c30] shadow-xs' : 'text-[#45464d]'
+                }`}
+              >
+                Solo esta vez
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsRecurring(true)}
+                className={`py-2 px-1 rounded-lg text-xs font-bold text-center transition-all ${
+                  isRecurring ? 'bg-[#ffffff] text-[#0b1c30] shadow-xs' : 'text-[#45464d]'
+                }`}
+              >
+                Recurrente mensual
+              </button>
+            </div>
+
+            {isRecurring && (
+              <div className="space-y-2 pt-1">
+                <div className="grid grid-cols-3 gap-1.5">
+                  {KIND_OPTIONS.map((k) => (
+                    <button
+                      key={k.id}
+                      type="button"
+                      onClick={() => setRecurringKind(k.id)}
+                      className={`flex items-center gap-1 p-2 rounded-xl text-left text-[11px] font-semibold transition-all active:scale-95 ${
+                        recurringKind === k.id
+                          ? 'bg-[#e5eeff] text-[#0b1c30] border border-[#006c49]/40'
+                          : 'bg-[#eff4ff] text-[#45464d]'
+                      }`}
+                    >
+                      <span
+                        className={`material-symbols-outlined text-[16px] ${
+                          recurringKind === k.id ? 'text-[#006c49]' : 'text-[#45464d]'
+                        }`}
+                      >
+                        {k.icon}
+                      </span>
+                      <span className="truncate">{k.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-[#45464d] font-bold">Día de pago de cada mes (1-31)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="31"
+                    required
+                    value={dayInput}
+                    onChange={(e) => setDayInput(e.target.value)}
+                    className="w-full px-3 py-2.5 bg-[#eff4ff] rounded-xl text-[#0b1c30] text-sm focus:bg-[#e5eeff] focus:outline-none border-none"
+                  />
+                </div>
+                <p className="text-[11px] text-[#45464d]">
+                  Se registra el pago de hoy, y cada mes aparecerá en «Gastos Fijos» para que pongas el valor de ese mes.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Método de Pago */}
@@ -259,9 +376,121 @@ export const GastosScreen: React.FC = () => {
             className="w-full h-12 bg-[#006c49] hover:bg-[#005236] text-[#ffffff] rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-xs active:scale-[0.985] transition-all"
           >
             <span className="material-symbols-outlined text-[20px]">save</span>
-            <span>Guardar Gasto Localmente</span>
+            <span>{isRecurring ? 'Guardar Gasto Recurrente' : 'Guardar Gasto Localmente'}</span>
           </button>
         </form>
+      </section>
+
+      {/* Gastos fijos (recurrentes mensuales) */}
+      <section className="bg-[#ffffff] p-4 rounded-2xl shadow-sm space-y-3 border border-[#c6c6cd]/20">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[20px] text-[#006c49]">event_repeat</span>
+            <h3 className="font-bold text-[1.05rem] text-[#0b1c30]">Gastos Fijos</h3>
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpenModal('nuevo-fijo')}
+            className="text-xs font-bold text-[#006c49] bg-[#6ffbbe]/40 px-3 py-1.5 rounded-full active:scale-95 transition-transform"
+          >
+            + Agregar
+          </button>
+        </div>
+
+        {servicios.length > 0 && (
+          <p className="text-xs text-[#45464d]">
+            {fixedPendingCount === 0
+              ? 'Todos pagados este mes ✓'
+              : `Por pagar este mes: ${formatCOP(fixedPendingTotal)} (${fixedPendingCount})`}
+          </p>
+        )}
+
+        {servicios.length === 0 ? (
+          <p className="text-xs text-[#45464d] bg-[#eff4ff] rounded-xl p-3">
+            Aún no tienes gastos fijos. Agrega tus servicios públicos y suscripciones con «+ Agregar», o marca un gasto como
+            «Recurrente mensual» al registrarlo.
+          </p>
+        ) : (
+          <div className="space-y-2.5">
+            {servicios.map((f) => (
+              <div
+                key={f.id}
+                className={`rounded-xl p-3 border transition-all ${
+                  f.paid ? 'border-[#006c49]/25 bg-[#eff4ff]/40' : 'border-[#c6c6cd]/20 bg-[#ffffff]'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        f.paid ? 'bg-[#6cf8bb]/40 text-[#006c49]' : 'bg-[#e5eeff] text-[#0b1c30]'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[20px]">{f.icon}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-[#0b1c30] truncate">{f.name}</p>
+                      <p className="text-[11px] text-[#45464d] truncate">
+                        {f.proveedor} · día {f.dueDay ?? '—'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <span className="text-sm font-extrabold text-[#0b1c30]">
+                      {f.amount > 0 ? formatCOP(f.amount) : 'Sin valor'}
+                    </span>
+                    <span className="block text-[10px] text-[#45464d]">
+                      {f.paid ? 'Pagado' : f.amount > 0 ? 'Último valor' : 'Pon el valor al pagar'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#eff4ff]">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => onOpenModal(`editar-fijo:${f.id}`)}
+                      className="flex items-center gap-1 text-xs font-semibold text-[#45464d] hover:text-[#0b1c30] p-1"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">edit</span>
+                      <span>Editar</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteFixed(f.id, f.name)}
+                      className="flex items-center gap-1 text-xs font-semibold text-[#ba1a1a] hover:opacity-80 p-1"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">delete</span>
+                      <span>Quitar</span>
+                    </button>
+                  </div>
+
+                  {f.paid ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-[#006c49] font-semibold">✓ {f.paidAt || 'Pagado'}</span>
+                      <button
+                        type="button"
+                        onClick={() => undoFixedPayment(f.id)}
+                        className="text-[#005236] text-xs font-bold underline hover:opacity-80 p-1"
+                      >
+                        Deshacer
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onOpenModal(`pagar-fijo:${f.id}`)}
+                      className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-[#006c49] text-[#ffffff] active:scale-95 transition-transform flex items-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">receipt</span>
+                      <span>Pagar</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Métrica Visual: Resumen por Categorías */}
