@@ -296,6 +296,13 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const markDebtPaid = (debtId: string, customDate?: string) => {
+    const debt = debts.find((d) => d.id === debtId);
+    if (!debt || debt.paidThisMonth) return;
+
+    // Solo se descuenta lo que hay en el saldo (nunca queda negativo);
+    // se guarda cuánto fue para devolver exactamente eso si se deshace el pago.
+    const deducted = Math.min(balance, debt.installmentAmount);
+
     setDebts((prev) =>
       prev.map((d) => {
         if (d.id === debtId && !d.paidThisMonth) {
@@ -306,6 +313,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
             status: 'up-to-date',
             paidDate,
             paidAmount: d.installmentAmount,
+            balanceDeducted: deducted,
             remainingBalance: Math.max(0, d.remainingBalance - d.installmentAmount),
             amortizedPct: Math.min(
               100,
@@ -317,12 +325,9 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
       })
     );
 
-    const debt = debts.find((d) => d.id === debtId);
-    if (debt) {
-      setBalance((b) => Math.max(0, b - debt.installmentAmount));
-      setPagadoMes((p) => p + debt.installmentAmount);
-      showNotification('¡Cuota pagada con éxito!', `${debt.name} (${debt.installmentAmount.toLocaleString('es-CO')}) registrada.`);
-    }
+    setBalance((b) => Math.max(0, b - debt.installmentAmount));
+    setPagadoMes((p) => p + debt.installmentAmount);
+    showNotification('¡Cuota pagada con éxito!', `${debt.name} (${debt.installmentAmount.toLocaleString('es-CO')}) registrada.`);
   };
 
   const undoDebtPayment = (debtId: string) => {
@@ -338,6 +343,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
             status: 'active',
             paidDate: undefined,
             paidAmount: undefined,
+            balanceDeducted: undefined,
             remainingBalance: d.remainingBalance + d.installmentAmount,
           };
         }
@@ -345,7 +351,8 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
       })
     );
 
-    setBalance((b) => b + debt.installmentAmount);
+    // Se devuelve al saldo solo lo que se había descontado
+    setBalance((b) => b + (debt.balanceDeducted ?? 0));
     setPagadoMes((p) => Math.max(0, p - debt.installmentAmount));
     showNotification('Pago revertido', `${debt.name} ha vuelto al estado pendiente.`);
   };
@@ -526,6 +533,9 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
       timeStr,
       detail: newExp.detail || 'Gasto registrado',
       active: true,
+      // Solo se descuenta lo que hay en el saldo (nunca queda negativo);
+      // se guarda cuánto fue para devolver exactamente eso si se borra el gasto.
+      balanceDeducted: Math.min(balance, newExp.amount),
     };
 
     setExpenses((prev) => [item, ...prev]);
@@ -537,17 +547,23 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     const item = expenses.find((e) => e.id === id);
     if (!item) return;
 
-    const nextActive = !item.active;
-    setExpenses((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, active: nextActive } : e))
-    );
-
-    if (!nextActive) {
-      setBalance((b) => b + item.amount);
-      showNotification('Gasto anulado', `Se restablecieron $${item.amount.toLocaleString('es-CO')} al balance.`);
+    if (item.active) {
+      // Anular: se devuelve al saldo solo lo que se había descontado
+      const back = item.balanceDeducted ?? 0;
+      setExpenses((prev) => prev.map((e) => (e.id === id ? { ...e, active: false } : e)));
+      setBalance((b) => b + back);
+      showNotification(
+        'Gasto anulado',
+        back > 0 ? `Se devolvieron $${back.toLocaleString('es-CO')} al saldo.` : 'El gasto quedó anulado.'
+      );
     } else {
+      // Reactivar: se vuelve a descontar lo que alcance del saldo
+      const deducted = Math.min(balance, item.amount);
+      setExpenses((prev) =>
+        prev.map((e) => (e.id === id ? { ...e, active: true, balanceDeducted: deducted } : e))
+      );
       setBalance((b) => Math.max(0, b - item.amount));
-      showNotification('Gasto reactivado', `Se dedujeron $${item.amount.toLocaleString('es-CO')} del balance.`);
+      showNotification('Gasto reactivado', `Se dedujeron $${deducted.toLocaleString('es-CO')} del saldo.`);
     }
   };
 
@@ -555,8 +571,17 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     const item = expenses.find((e) => e.id === id);
     if (!item) return;
 
+    // Si el gasto viene del pago de un gasto fijo, se deshace ese pago completo
+    // (el gasto fijo vuelve a "por pagar" y el saldo queda como estaba)
+    const linkedFixed = servicios.find((s) => s.expenseId === id);
+    if (linkedFixed) {
+      undoFixedPayment(linkedFixed.id);
+      return;
+    }
+
+    // Se devuelve al saldo solo lo que ese gasto había descontado
     if (item.active) {
-      setBalance((b) => b + item.amount);
+      setBalance((b) => b + (item.balanceDeducted ?? 0));
     }
     setExpenses((prev) => prev.filter((e) => e.id !== id));
     showNotification('Gasto eliminado', `${item.concept} removido del historial.`);
@@ -598,8 +623,8 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   // Elimina una obligacion. Si ya estaba pagada este mes, su cuota tambien se resta de lo
-  // "pagado en el mes", y el compromiso mensual baja por el valor de su cuota.
-  // El saldo no se toca: hoy la app no lleva el registro exacto de lo que descontó cada pago.
+  // "pagado en el mes", se devuelve al saldo lo que ese pago habia descontado, y el
+  // compromiso mensual baja por el valor de su cuota.
   const deleteDebt = (debtId: string) => {
     const debt = debts.find((d) => d.id === debtId);
     if (!debt) return;
@@ -609,6 +634,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
 
     if (debt.paidThisMonth) {
       setPagadoMes((p) => Math.max(0, p - debt.installmentAmount));
+      setBalance((b) => b + (debt.balanceDeducted ?? 0));
     }
 
     showNotification('Obligación eliminada', `${debt.name} fue eliminada de tus compromisos.`);
