@@ -33,7 +33,7 @@ const MainLayout: React.FC = () => {
           {currentTab === 'inicio' && <InicioScreen onOpenModal={openModal} />}
           {currentTab === 'deudas' && <DeudasScreen onOpenModal={openModal} />}
           {currentTab === 'ahorro' && <AhorroScreen />}
-          {currentTab === 'gastos' && <GastosScreen />}
+          {currentTab === 'gastos' && <GastosScreen onOpenModal={openModal} />}
         </main>
 
         {/* Bottom Navigation */}

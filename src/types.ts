@@ -27,6 +27,9 @@ export interface CuotaObligacion {
   ruleDaysBefore?: number;
 }
 
+export type FixedKind = 'servicio' | 'suscripcion' | 'otro';
+
+// Gasto fijo (recurrente mensual): servicios públicos, suscripciones, etc.
 export interface ServicioPublico {
   id: string;
   name: string;
@@ -37,6 +40,11 @@ export interface ServicioPublico {
   dueDaysNotice: string;
   paid: boolean;
   paidAt?: string;
+  kind?: FixedKind;
+  dueDay?: number;
+  paidPeriod?: string; // "AAAA-MM" del mes en que se pagó
+  expenseId?: string; // gasto que se registró al pagar
+  balanceDeducted?: number; // saldo que se descontó al pagar
 }
 
 export type ExpenseCategory = 'Alimentación' | 'Transporte' | 'Hogar' | 'Salud' | 'Ocio' | 'Otros';
