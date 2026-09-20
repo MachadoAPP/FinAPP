@@ -30,6 +30,8 @@ export const Modals: React.FC<ModalsProps> = ({ activeModal, onClose }) => {
   const {
     addExpense,
     addNewDebt,
+    balance,
+    setBalance,
     debts,
     updateDebt,
     servicios,
@@ -127,6 +129,29 @@ export const Modals: React.FC<ModalsProps> = ({ activeModal, onClose }) => {
     setFixAmount(editingFixed.amount > 0 ? String(editingFixed.amount) : '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editFixedId]);
+
+  // Ajustar saldo: escribir cuánto dinero tienes hoy
+  const [balanceInput, setBalanceInput] = useState<string>('');
+
+  // Al abrir "Ajustar saldo", muestra el saldo actual
+  useEffect(() => {
+    if (activeModal === 'ajustar-saldo') {
+      setBalanceInput(String(balance));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeModal]);
+
+  const handleBalanceSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const value = parseFloat(balanceInput);
+    if (isNaN(value) || value < 0) {
+      alert('Escribe un valor de 0 en adelante.');
+      return;
+    }
+    setBalance(value);
+    showNotification('Saldo actualizado', `Tu saldo disponible ahora es $${value.toLocaleString('es-CO')}.`);
+    onClose();
+  };
 
   // Al abrir "Pagar gasto fijo", propone el último valor pagado
   useEffect(() => {
@@ -913,6 +938,67 @@ export const Modals: React.FC<ModalsProps> = ({ activeModal, onClose }) => {
               >
                 <span className="material-symbols-outlined text-[18px]">check_circle</span>
                 Registrar pago
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* MODAL: AJUSTAR SALDO */}
+        {activeModal === 'ajustar-saldo' && (
+          <div>
+            <div className="flex justify-between items-start mb-4 border-b border-[#eff4ff] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-[#6cf8bb]/40 flex items-center justify-center text-[#006c49]">
+                  <span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-[1.125rem] text-[#0b1c30]">Ajustar saldo</h3>
+                  <p className="text-xs text-[#45464d]">Cuánto dinero tienes disponible hoy</p>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="text-[#45464d] hover:text-[#0b1c30] p-1 rounded-full hover:bg-[#eff4ff]"
+              >
+                <span className="material-symbols-outlined text-[22px]">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleBalanceSubmit} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-[#45464d] mb-1">
+                  Saldo disponible ($)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-[#45464d] text-lg">
+                    $
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    step="any"
+                    min="0"
+                    required
+                    autoFocus
+                    placeholder="0"
+                    value={balanceInput}
+                    onChange={(e) => setBalanceInput(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2.5 rounded-xl bg-[#eff4ff] text-[#0b1c30] text-lg font-bold outline-none border border-transparent focus:border-[#006c49] transition-all"
+                  />
+                </div>
+              </div>
+
+              <p className="text-[11px] text-[#45464d]">
+                Este valor reemplaza al saldo actual. Desde aquí, los gastos y pagos que registres se descuentan de él,
+                y si borras uno, se devuelve solo lo que había descontado.
+              </p>
+
+              <button
+                type="submit"
+                className="w-full h-12 bg-[#006c49] text-[#ffffff] font-bold text-sm rounded-xl active:scale-[0.985] transition-all shadow-sm flex items-center justify-center gap-2 mt-2"
+              >
+                <span className="material-symbols-outlined text-[18px]">save</span>
+                Guardar saldo
               </button>
             </form>
           </div>
