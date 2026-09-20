@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useFinancial } from '../context/FinancialContext';
 import { ExpenseCategory, PaymentMethod } from '../types';
-import { formatCOP } from '../utils/finance';
 
 // Lee el día de pago (1-31) del texto "Día 15 de cada mes"
 const parseDay = (text: string): number => {
@@ -28,7 +27,6 @@ export const Modals: React.FC<ModalsProps> = ({ activeModal, onClose }) => {
     setWindowRuleDays,
     autoCloseOverdue,
     setAutoCloseOverdue,
-    setCurrentTab,
     showNotification,
   } = useFinancial();
 
@@ -47,11 +45,6 @@ export const Modals: React.FC<ModalsProps> = ({ activeModal, onClose }) => {
   const [debtInstallments, setDebtInstallments] = useState<string>('24');
   const [debtInstallmentAmount, setDebtInstallmentAmount] = useState<string>('');
   const [debtDay, setDebtDay] = useState<string>('15');
-
-  // Quick Simulation state
-  const [simMonto, setSimMonto] = useState<number>(2000000);
-  const [simPlazo, setSimPlazo] = useState<number>(12);
-  const [simTasa, setSimTasa] = useState<number>(1.8);
 
   // Edit Debt form state
   const [editName, setEditName] = useState<string>('');
@@ -149,12 +142,6 @@ export const Modals: React.FC<ModalsProps> = ({ activeModal, onClose }) => {
     setDebtTotal('');
     setDebtInstallmentAmount('');
     onClose();
-  };
-
-  const calculatedSimCuota = () => {
-    const i = simTasa / 100;
-    if (i <= 0) return simMonto / simPlazo;
-    return (simMonto * (i * Math.pow(1 + i, simPlazo))) / (Math.pow(1 + i, simPlazo) - 1);
   };
 
   if (!activeModal) return null;
@@ -560,115 +547,6 @@ export const Modals: React.FC<ModalsProps> = ({ activeModal, onClose }) => {
                 Guardar Cambios
               </button>
             </form>
-          </div>
-        )}
-
-        {/* MODAL 3: SIMULAR CRÉDITO RÁPIDO */}
-        {activeModal === 'simular-credito' && (
-          <div>
-            <div className="flex justify-between items-start mb-4 border-b border-[#eff4ff] pb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-[#6cf8bb]/40 flex items-center justify-center text-[#006c49]">
-                  <span className="material-symbols-outlined text-[20px]">calculate</span>
-                </div>
-                <div>
-                  <h3 className="font-bold text-[1.125rem] text-[#0b1c30]">Simulador Rápido</h3>
-                  <p className="text-xs text-[#45464d]">Calcula tu cuota mensual estimada</p>
-                </div>
-              </div>
-              <button
-                onClick={onClose}
-                className="text-[#45464d] hover:text-[#0b1c30] p-1 rounded-full hover:bg-[#eff4ff]"
-              >
-                <span className="material-symbols-outlined text-[22px]">close</span>
-              </button>
-            </div>
-
-            <div className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-semibold text-[#45464d] mb-1">
-                  Monto a financiar ($)
-                </label>
-                <input
-                  type="number"
-                  step="100000"
-                  value={simMonto}
-                  onChange={(e) => setSimMonto(parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#eff4ff] text-[#0b1c30] text-base font-bold outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-semibold text-[#45464d] mb-1">
-                    Plazo (meses)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="72"
-                    value={simPlazo}
-                    onChange={(e) => setSimPlazo(parseInt(e.target.value, 10) || 12)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#eff4ff] text-[#0b1c30] text-sm outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-[#45464d] mb-1">
-                    Tasa mensual (%)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={simTasa}
-                    onChange={(e) => setSimTasa(parseFloat(e.target.value) || 1.8)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#eff4ff] text-[#0b1c30] text-sm outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="bg-[#eff4ff] p-3.5 rounded-xl flex flex-col items-center justify-center border border-[#e5eeff]">
-                <span className="text-xs text-[#45464d]">Cuota Mensual Estimada</span>
-                <span className="text-xl font-extrabold text-[#006c49] mt-0.5">
-                  {formatCOP(calculatedSimCuota())} / mes
-                </span>
-                <span className="text-[11px] text-[#45464d] mt-1">
-                  Costo total aprox: {formatCOP(calculatedSimCuota() * simPlazo)}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    setCurrentTab('calculadora');
-                  }}
-                  className="h-11 bg-[#eff4ff] hover:bg-[#e5eeff] text-[#0b1c30] font-semibold text-xs rounded-xl transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-[16px]">visibility</span>
-                  Ver Plan Completo
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    addNewDebt({
-                      name: `Préstamo ${formatCOP(simMonto)}`,
-                      entity: 'Simulación Rápida',
-                      totalAmount: simMonto,
-                      totalInstallments: simPlazo,
-                      installmentAmount: Math.round(calculatedSimCuota()),
-                      paymentDay: 15,
-                    });
-                    onClose();
-                  }}
-                  className="h-11 bg-[#006c49] text-[#ffffff] font-bold text-xs rounded-xl active:scale-95 transition-transform flex items-center justify-center gap-1.5 shadow-sm"
-                >
-                  <span className="material-symbols-outlined text-[16px]">check</span>
-                  Agregar a Deudas
-                </button>
-              </div>
-            </div>
           </div>
         )}
 

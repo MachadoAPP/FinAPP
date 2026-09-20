@@ -14,7 +14,6 @@ export const BottomNav: React.FC = () => {
     { id: 'inicio', label: 'Inicio', icon: 'dashboard' },
     { id: 'deudas', label: 'Deudas', icon: 'credit_card', badge: totalPendingBadges },
     { id: 'ahorro', label: 'Ahorro', icon: 'savings' },
-    { id: 'calculadora', label: 'Simulador', icon: 'calculate' },
     { id: 'gastos', label: 'Gastos', icon: 'receipt_long' },
   ];
 
