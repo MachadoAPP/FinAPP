@@ -25,6 +25,7 @@ export interface CuotaObligacion {
   paidAmount?: number;
   receiptNote?: string;
   ruleDaysBefore?: number;
+  balanceDeducted?: number; // lo que realmente se descontó del saldo al pagar la cuota
 }
 
 export type FixedKind = 'servicio' | 'suscripcion' | 'otro';
@@ -62,6 +63,7 @@ export interface GastoItem {
   timeStr: string;
   detail?: string;
   active: boolean;
+  balanceDeducted?: number; // lo que realmente se descontó del saldo al registrarlo
 }
 
 export interface AmortizationRow {
