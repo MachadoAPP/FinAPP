@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { CuotaObligacion, ServicioPublico, GastoItem, TabType, SimulationParams, AhorroMeta } from '../types';
+import { CuotaObligacion, ServicioPublico, GastoItem, TabType, SimulationParams, AhorroMeta, FixedKind, PaymentMethod } from '../types';
 import { calculateSimulation } from '../utils/finance';
 
 interface ToastState {
@@ -32,6 +32,21 @@ interface FinancialContextType {
   markDebtPaid: (debtId: string, customDate?: string) => void;
   undoDebtPayment: (debtId: string) => void;
   payService: (serviceId: string) => void;
+  addFixedExpense: (data: {
+    name: string;
+    kind: FixedKind;
+    amount: number;
+    dueDay: number;
+    paidNow?: boolean;
+    paymentMethod?: PaymentMethod;
+  }) => void;
+  updateFixedExpense: (
+    id: string,
+    data: { name: string; kind: FixedKind; amount: number; dueDay: number }
+  ) => void;
+  deleteFixedExpense: (id: string) => void;
+  payFixedExpense: (id: string, amount: number, method?: PaymentMethod) => void;
+  undoFixedPayment: (id: string) => void;
   addExpense: (expense: {
     concept: string;
     amount: number;
@@ -86,6 +101,42 @@ interface FinancialContextType {
 // se ignoran y se borran, asi la app arranca vacia en cualquier dispositivo.
 const STORAGE_KEY = 'fincontrol_local_vault_v4';
 const OLD_STORAGE_KEY = 'fincontrol_local_vault_v3';
+
+// ---- Gastos fijos (recurrentes mensuales) ----
+const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+const KIND_LABEL: Record<FixedKind, string> = {
+  servicio: 'Servicio público',
+  suscripcion: 'Suscripción',
+  otro: 'Gasto fijo',
+};
+
+// Categoría con la que se cuenta el pago dentro de "Gastos"
+const KIND_CATEGORY: Record<FixedKind, GastoItem['category']> = {
+  servicio: 'Hogar',
+  suscripcion: 'Ocio',
+  otro: 'Otros',
+};
+
+// Mes actual en formato AAAA-MM (hora local)
+const currentPeriod = (): string => {
+  const t = new Date();
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}`;
+};
+
+// Ícono según el nombre y el tipo del gasto fijo
+const iconForFixed = (name: string, kind: FixedKind): string => {
+  const n = name.toLowerCase();
+  if (/agua|acueducto|alcantarill/.test(n)) return 'water_drop';
+  if (/luz|energ|electric/.test(n)) return 'bolt';
+  if (/\bgas\b|vanti|gases/.test(n)) return 'mode_heat';
+  if (/internet|wifi|fibra|claro hogar|etb/.test(n)) return 'wifi';
+  if (/celular|m[oó]vil|plan de datos|tigo|movistar|claro/.test(n)) return 'smartphone';
+  if (/spotify|m[uú]sica|deezer|apple music|youtube music/.test(n)) return 'music_note';
+  if (kind === 'suscripcion') return 'subscriptions';
+  if (kind === 'servicio') return 'receipt_long';
+  return 'event_repeat';
+};
 
 // Estado inicial: todo en cero, sin datos de ejemplo.
 const INITIAL_DEBTS: CuotaObligacion[] = [];
@@ -146,6 +197,37 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     } catch (e) {
       console.error('Error loading localStorage state', e);
     }
+  }, []);
+
+  // Cambio de mes: los gastos fijos pagados el mes pasado vuelven a "por pagar"
+  // (conservan el último valor como referencia). Se revisa al abrir la app y al volver a ella.
+  useEffect(() => {
+    const applyMonthRollover = () => {
+      const period = currentPeriod();
+      setServicios((prev) => {
+        const vencido = (s: ServicioPublico) => s.paid && !!s.paidPeriod && s.paidPeriod !== period;
+        if (!prev.some(vencido)) return prev;
+        return prev.map((s) =>
+          vencido(s)
+            ? {
+                ...s,
+                paid: false,
+                paidAt: undefined,
+                paidPeriod: undefined,
+                expenseId: undefined,
+                balanceDeducted: undefined,
+              }
+            : s
+        );
+      });
+    };
+
+    applyMonthRollover();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') applyMonthRollover();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
   // Save to localStorage when critical values change
@@ -268,20 +350,156 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     showNotification('Pago revertido', `${debt.name} ha vuelto al estado pendiente.`);
   };
 
-  const payService = (serviceId: string) => {
-    const service = servicios.find((s) => s.id === serviceId);
-    if (!service || service.paid) return;
-
+  // Arma el pago de un gasto fijo: el gasto que queda registrado y el gasto fijo ya marcado como pagado
+  const buildFixedPayment = (item: ServicioPublico, amount: number, method: PaymentMethod) => {
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    const kind: FixedKind = item.kind ?? 'otro';
+    const expenseId = 'exp-fijo-' + Date.now();
+
+    const expense: GastoItem = {
+      id: expenseId,
+      concept: item.name,
+      category: KIND_CATEGORY[kind],
+      categoryIcon: item.icon,
+      amount,
+      paymentMethod: method,
+      dateGroup: 'hoy',
+      timeStr,
+      detail: KIND_LABEL[kind],
+      active: true,
+    };
+
+    const paidItem: ServicioPublico = {
+      ...item,
+      amount,
+      paid: true,
+      paidAt: `${now.getDate()} ${MESES_CORTOS[now.getMonth()]}`,
+      paidPeriod: currentPeriod(),
+      expenseId,
+      balanceDeducted: Math.min(balance, amount),
+    };
+
+    return { expense, paidItem };
+  };
+
+  const payFixedExpense = (id: string, amount: number, method: PaymentMethod = 'debit') => {
+    const item = servicios.find((s) => s.id === id);
+    if (!item || item.paid || !(amount > 0)) return;
+
+    const { expense, paidItem } = buildFixedPayment(item, amount, method);
+    setServicios((prev) => prev.map((s) => (s.id === id ? paidItem : s)));
+    setExpenses((prev) => [expense, ...prev]);
+    setBalance((b) => Math.max(0, b - amount));
+    showNotification('¡Gasto fijo pagado!', `${item.name} ($${amount.toLocaleString('es-CO')}) registrado en tus gastos.`);
+  };
+
+  // Compatibilidad: paga un gasto fijo con su último valor
+  const payService = (serviceId: string) => {
+    const service = servicios.find((s) => s.id === serviceId);
+    if (!service) return;
+    payFixedExpense(serviceId, service.amount);
+  };
+
+  const addFixedExpense = (data: {
+    name: string;
+    kind: FixedKind;
+    amount: number;
+    dueDay: number;
+    paidNow?: boolean;
+    paymentMethod?: PaymentMethod;
+  }) => {
+    const base: ServicioPublico = {
+      id: 'fijo-' + Date.now(),
+      name: data.name,
+      proveedor: KIND_LABEL[data.kind],
+      icon: iconForFixed(data.name, data.kind),
+      amount: data.amount,
+      dueDate: `Día ${data.dueDay} de cada mes`,
+      dueDaysNotice: '',
+      paid: false,
+      kind: data.kind,
+      dueDay: data.dueDay,
+    };
+
+    if (data.paidNow) {
+      const { expense, paidItem } = buildFixedPayment(base, data.amount, data.paymentMethod ?? 'cash');
+      setServicios((prev) => [paidItem, ...prev]);
+      setExpenses((prev) => [expense, ...prev]);
+      setBalance((b) => Math.max(0, b - data.amount));
+      showNotification(
+        '¡Gasto recurrente guardado!',
+        `${data.name} quedó pagado este mes y se repetirá cada mes.`
+      );
+    } else {
+      setServicios((prev) => [base, ...prev]);
+      showNotification('¡Gasto fijo agregado!', `${data.name} quedó por pagar este mes.`);
+    }
+  };
+
+  // Edita un gasto fijo. Si ya está pagado este mes, el valor pagado no se cambia.
+  const updateFixedExpense = (
+    id: string,
+    data: { name: string; kind: FixedKind; amount: number; dueDay: number }
+  ) => {
+    const item = servicios.find((s) => s.id === id);
+    if (!item) return;
 
     setServicios((prev) =>
-      prev.map((s) => (s.id === serviceId ? { ...s, paid: true, paidAt: `hoy a las ${timeStr}` } : s))
+      prev.map((s) =>
+        s.id === id
+          ? {
+              ...s,
+              name: data.name,
+              kind: data.kind,
+              proveedor: KIND_LABEL[data.kind],
+              icon: iconForFixed(data.name, data.kind),
+              dueDay: data.dueDay,
+              dueDate: `Día ${data.dueDay} de cada mes`,
+              amount: s.paid ? s.amount : data.amount,
+            }
+          : s
+      )
     );
+    showNotification('Gasto fijo actualizado', `${data.name} se guardó con los cambios.`);
+  };
 
-    setBalance((b) => Math.max(0, b - service.amount));
-    setPagadoMes((p) => p + service.amount);
-    showNotification('¡Servicio Pagado!', `${service.name} ($${service.amount.toLocaleString('es-CO')}) cancelado con éxito.`);
+  // Quita un gasto fijo: deja de aparecer cada mes. El pago ya hecho queda en tus gastos.
+  const deleteFixedExpense = (id: string) => {
+    const item = servicios.find((s) => s.id === id);
+    if (!item) return;
+    setServicios((prev) => prev.filter((s) => s.id !== id));
+    showNotification('Gasto fijo eliminado', `${item.name} ya no aparecerá cada mes.`);
+  };
+
+  // Deshace el pago de este mes: quita el gasto registrado y devuelve al saldo lo que se descontó
+  const undoFixedPayment = (id: string) => {
+    const item = servicios.find((s) => s.id === id);
+    if (!item || !item.paid) return;
+
+    const linked = item.expenseId ? expenses.find((e) => e.id === item.expenseId) : undefined;
+    if (item.expenseId) {
+      setExpenses((prev) => prev.filter((e) => e.id !== item.expenseId));
+    }
+    if (linked && linked.active) {
+      setBalance((b) => b + (item.balanceDeducted ?? 0));
+    }
+
+    setServicios((prev) =>
+      prev.map((s) =>
+        s.id === id
+          ? {
+              ...s,
+              paid: false,
+              paidAt: undefined,
+              paidPeriod: undefined,
+              expenseId: undefined,
+              balanceDeducted: undefined,
+            }
+          : s
+      )
+    );
+    showNotification('Pago revertido', `${item.name} volvió a "por pagar" este mes.`);
   };
 
   const addExpense = (newExp: {
@@ -644,6 +862,11 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
         markDebtPaid,
         undoDebtPayment,
         payService,
+        addFixedExpense,
+        updateFixedExpense,
+        deleteFixedExpense,
+        payFixedExpense,
+        undoFixedPayment,
         addExpense,
         toggleExpense,
         deleteExpense,
