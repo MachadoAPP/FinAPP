@@ -6,17 +6,38 @@ interface DeudasScreenProps {
   onOpenModal: (modalId: string) => void;
 }
 
+const MESES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+
+// Fecha de hoy en formato AAAA-MM-DD (hora local, no UTC)
+const todayISO = (): string => {
+  const t = new Date();
+  const mm = String(t.getMonth() + 1).padStart(2, '0');
+  const dd = String(t.getDate()).padStart(2, '0');
+  return `${t.getFullYear()}-${mm}-${dd}`;
+};
+
+// Lee el día de pago (1-31) de textos como "Día 15 de cada mes"
+const parseDueDay = (dueDate: string): number | null => {
+  const m = dueDate.match(/\d{1,2}/);
+  if (!m) return null;
+  return Math.min(31, Math.max(1, parseInt(m[0], 10)));
+};
+
 export const DeudasScreen: React.FC<DeudasScreenProps> = ({ onOpenModal }) => {
   const {
     debts,
     markDebtPaid,
     undoDebtPayment,
+    deleteDebt,
     triggerConfetti,
   } = useFinancial();
 
   const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'up-to-date' | 'closed'>('all');
   const [openProofFormId, setOpenProofFormId] = useState<string | null>(null);
-  const [proofDate, setProofDate] = useState<string>('2024-10-26');
+  const [proofDate, setProofDate] = useState<string>(todayISO());
 
   // Calculations
   const totalActiveDebt = debts.reduce((sum, d) => sum + d.remainingBalance, 0);
@@ -28,12 +49,50 @@ export const DeudasScreen: React.FC<DeudasScreenProps> = ({ onOpenModal }) => {
   const upToDateCount = debts.filter((d) => d.paidThisMonth || d.status === 'up-to-date').length;
   const closedCount = debts.filter((d) => d.status === 'closed').length;
 
+  // Valor mensual de las obligaciones (suma de las cuotas mensuales de las que siguen vigentes)
+  const vigentes = debts.filter((d) => d.status !== 'closed');
+  const totalMensual = vigentes.reduce((sum, d) => sum + d.installmentAmount, 0);
+  const faltaEsteMes = vigentes
+    .filter((d) => !d.paidThisMonth)
+    .reduce((sum, d) => sum + d.installmentAmount, 0);
+
+  // Próximo corte real: el día de pago más cercano entre las cuotas que faltan por pagar este mes
+  const now = new Date();
+  const proximosCortes = vigentes
+    .filter((d) => !d.paidThisMonth)
+    .map((d) => parseDueDay(d.dueDate))
+    .filter((day): day is number => day !== null)
+    .map((day) => {
+      const diasDelMes = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      return Math.min(day, diasDelMes);
+    });
+  const proximoCorteDia = proximosCortes.length > 0 ? Math.min(...proximosCortes) : null;
+  const proximoCorteLabel =
+    proximoCorteDia !== null ? `${proximoCorteDia} ${MESES[now.getMonth()]}` : '—';
+
   const filteredDebts = debts.filter((debt) => {
     if (activeFilter === 'pending') return !debt.paidThisMonth && debt.status === 'active';
     if (activeFilter === 'up-to-date') return debt.paidThisMonth || debt.status === 'up-to-date';
     if (activeFilter === 'closed') return debt.status === 'closed';
     return true;
   });
+
+  const handleEdit = (debtId: string, isPaid: boolean) => {
+    if (isPaid) {
+      alert('Esta obligación está marcada como pagada este mes. Primero pulsa "Deshacer" y luego edítala.');
+      return;
+    }
+    onOpenModal(`editar-deuda:${debtId}`);
+  };
+
+  const handleDelete = (debtId: string, name: string, isPaid: boolean) => {
+    const extra = isPaid
+      ? '\n\nComo ya está marcada como pagada este mes, su cuota también se restará de lo pagado en el mes.'
+      : '';
+    if (window.confirm(`¿Eliminar la obligación "${name}"?${extra}`)) {
+      deleteDebt(debtId);
+    }
+  };
 
   return (
     <div className="flex flex-col w-full pb-10 space-y-4">
@@ -44,7 +103,7 @@ export const DeudasScreen: React.FC<DeudasScreenProps> = ({ onOpenModal }) => {
             verified_user
           </span>
           <span className="text-xs font-semibold text-[#002113] truncate">
-            Privacidad activa: Datos cifrados localmente
+            Tus datos se guardan solo en este dispositivo
           </span>
         </div>
         <button
@@ -80,6 +139,20 @@ export const DeudasScreen: React.FC<DeudasScreenProps> = ({ onOpenModal }) => {
           </div>
         </div>
 
+        {/* Valor mensual de las obligaciones */}
+        <div className="flex items-center justify-between gap-3 bg-[#ffffff]/10 rounded-xl px-3 py-2.5 mb-3">
+          <div className="min-w-0">
+            <span className="text-xs text-[#7c839b] block">A pagar cada mes</span>
+            <span className="text-xl font-extrabold text-[#ffffff] tracking-tight">
+              {formatCOP(totalMensual)}
+            </span>
+          </div>
+          <div className="text-right flex-shrink-0">
+            <span className="text-xs text-[#7c839b] block">Falta este mes</span>
+            <span className="text-sm font-bold text-[#6ffbbe]">{formatCOP(faltaEsteMes)}</span>
+          </div>
+        </div>
+
         {/* Secondary Metric Splits */}
         <div className="grid grid-cols-2 gap-3 pt-3 border-t border-[#ffffff]/10">
           <div className="flex flex-col">
@@ -92,10 +165,10 @@ export const DeudasScreen: React.FC<DeudasScreenProps> = ({ onOpenModal }) => {
           </div>
           <div className="flex flex-col pl-3 border-l border-[#ffffff]/10">
             <span className="text-xs text-[#7c839b]">Próximo corte</span>
-            <span className="text-lg font-bold text-[#ffffff]">30 Octubre</span>
+            <span className="text-lg font-bold text-[#ffffff]">{proximoCorteLabel}</span>
             <span className="text-xs text-[#4edea3] mt-0.5 flex items-center gap-1">
               <span className="material-symbols-outlined text-[14px]">event_upcoming</span>
-              {pendingCount} cuotas en ciclo
+              {pendingCount > 0 ? `${pendingCount} cuotas en ciclo` : 'Sin cuotas pendientes'}
             </span>
           </div>
         </div>
@@ -241,7 +314,7 @@ export const DeudasScreen: React.FC<DeudasScreenProps> = ({ onOpenModal }) => {
                 <div className="grid grid-cols-2 gap-2 mt-3 pl-1 bg-[#eff4ff] p-2.5 rounded-xl">
                   <div>
                     <span className="text-[11px] text-[#45464d] block">
-                      Cuota vigente #{debt.currentInstallment}
+                      Cuota mensual · #{debt.currentInstallment}
                     </span>
                     <span className="text-lg font-bold text-[#0b1c30]">
                       {formatCOP(debt.installmentAmount)}
@@ -363,7 +436,7 @@ export const DeudasScreen: React.FC<DeudasScreenProps> = ({ onOpenModal }) => {
                       </div>
 
                       {openProofFormId === debt.id && (
-                        <div className="mt-2.5 p-3 bg-[#e5eeff] rounded-xl space-y-2.5 text-xs animate-toast">
+                        <div className="mt-2.5 p-3 bg-[#e5eeff] rounded-xl space-y-2.5 text-xs">
                           <div>
                             <label className="block text-xs font-semibold text-[#0b1c30] mb-1">
                               Fecha de Débito Real
@@ -391,24 +464,30 @@ export const DeudasScreen: React.FC<DeudasScreenProps> = ({ onOpenModal }) => {
                     </div>
                   )}
                 </div>
+
+                {/* Editar / Eliminar */}
+                <div className="mt-3 pl-1 pt-2 border-t border-[#eff4ff] flex items-center justify-end gap-4">
+                  <button
+                    type="button"
+                    onClick={() => handleEdit(debt.id, isPaid)}
+                    className="flex items-center gap-1 text-xs font-semibold text-[#45464d] hover:text-[#0b1c30] p-1"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">edit</span>
+                    <span>Editar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(debt.id, debt.name, isPaid)}
+                    className="flex items-center gap-1 text-xs font-semibold text-[#ba1a1a] hover:opacity-80 p-1"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">delete</span>
+                    <span>Eliminar</span>
+                  </button>
+                </div>
               </div>
             );
           })
         )}
-      </div>
-
-      {/* Subtle Financial Tip Card */}
-      <div className="p-4 bg-[#e5eeff] rounded-2xl flex items-start gap-3 border border-[#c6c6cd]/20">
-        <span className="material-symbols-outlined text-[#006c49] text-[22px] flex-shrink-0 mt-0.5">
-          lightbulb
-        </span>
-        <div className="flex flex-col">
-          <span className="font-bold text-sm text-[#0b1c30]">Estrategia Bola de Nieve</span>
-          <p className="text-xs text-[#45464d] mt-0.5 leading-relaxed">
-            Terminarás el crédito de <strong>Electrodoméstico</strong> el próximo mes. Esos $85.000
-            liberados acelerarán tu pago del Libre Inversión.
-          </p>
-        </div>
       </div>
 
       {/* Sticky Action Trigger Container */}
