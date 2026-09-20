@@ -146,19 +146,24 @@ export const AhorroScreen: React.FC = () => {
 
   return (
     <div className="flex flex-col w-full pb-10 space-y-4">
+      {/* Animación propia para las ventanas (aparecen con un fundido, sin moverse de lado) */}
+      <style>{`
+        @keyframes finapp-fade-in {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+      `}</style>
+
       {/* Privacy / Local vault banner */}
       <div className="flex items-center justify-between px-3.5 py-2.5 bg-[#eff4ff] rounded-xl shadow-xs border border-[#c6c6cd]/25">
         <div className="flex items-center gap-2 min-w-0">
           <span className="material-symbols-outlined text-[18px] text-[#006c49] flex-shrink-0">
-            lock
+            smartphone
           </span>
           <span className="text-xs font-semibold text-[#0b1c30] truncate">
-            Bóveda Local: Metas de Ahorro en tu Celular
+            Tus metas se guardan solo en este dispositivo
           </span>
         </div>
-        <span className="text-[10px] bg-[#6ffbbe]/50 text-[#005236] font-extrabold px-2 py-0.5 rounded-full flex-shrink-0">
-          100% Privado
-        </span>
       </div>
 
       {/* Hero Bento Card: Total Ahorrado */}
@@ -419,7 +424,7 @@ export const AhorroScreen: React.FC = () => {
                     </button>
 
                     {isHistoryOpen && (
-                      <div className="mt-2 bg-[#f8f9ff] rounded-xl p-2.5 space-y-1.5 border border-[#eff4ff] text-xs animate-toast">
+                      <div className="mt-2 bg-[#f8f9ff] rounded-xl p-2.5 space-y-1.5 border border-[#eff4ff] text-xs">
                         {goal.history.map((h) => (
                           <div
                             key={h.id}
@@ -465,18 +470,21 @@ export const AhorroScreen: React.FC = () => {
           tips_and_updates
         </span>
         <div className="flex flex-col">
-          <span className="font-bold text-xs text-[#002113]">Regla de Oro del Ahorro</span>
+          <span className="font-bold text-xs text-[#002113]">Un consejo para ahorrar</span>
           <p className="text-xs text-[#005236] mt-0.5 leading-relaxed">
-            Cuando fijas un <strong>propósito claro</strong> (como viajar o tener colchón de emergencia),
-            es un 42% más probable que alcances tu meta. ¡Abona pequeñas sumas recurrentes cada semana!
+            Ponle un <strong>propósito claro</strong> a cada meta (viajar, tener un colchón de emergencia)
+            y abona sumas pequeñas cada semana: la constancia pesa más que el monto.
           </p>
         </div>
       </div>
 
       {/* MODAL: CREATE OR EDIT GOAL */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-[100] bg-[#000000]/60 backdrop-blur-xs flex items-center justify-center p-3 animate-toast">
-          <div className="w-full max-w-[390px] bg-[#ffffff] rounded-3xl p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto border border-[#c6c6cd]/25">
+        <div
+          className="fixed inset-0 z-[100] bg-[#000000]/60 backdrop-blur-xs flex items-center justify-center p-3"
+          style={{ animation: 'finapp-fade-in 0.18s ease-out' }}
+        >
+          <div className="w-full max-w-[390px] bg-[#ffffff] rounded-3xl p-5 shadow-2xl space-y-4 max-h-[90dvh] overflow-y-auto overscroll-contain border border-[#c6c6cd]/25">
             <div className="flex items-center justify-between pb-2 border-b border-[#eff4ff]">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-[#006c49] flex items-center justify-center text-[#ffffff]">
@@ -536,7 +544,8 @@ export const AhorroScreen: React.FC = () => {
                   </label>
                   <input
                     type="number"
-                    step="10000"
+                    inputMode="numeric"
+                    step="any"
                     min="1000"
                     required
                     placeholder="Ej: 2000000"
@@ -553,7 +562,8 @@ export const AhorroScreen: React.FC = () => {
                     </label>
                     <input
                       type="number"
-                      step="10000"
+                      inputMode="numeric"
+                      step="any"
                       min="0"
                       placeholder="0"
                       value={formCurrentAmount}
@@ -656,8 +666,11 @@ export const AhorroScreen: React.FC = () => {
 
       {/* MODAL: DEPOSIT OR WITHDRAW */}
       {actionGoal && (
-        <div className="fixed inset-0 z-[100] bg-[#000000]/60 backdrop-blur-xs flex items-center justify-center p-3 animate-toast">
-          <div className="w-full max-w-[360px] bg-[#ffffff] rounded-3xl p-5 shadow-2xl space-y-4 border border-[#c6c6cd]/25">
+        <div
+          className="fixed inset-0 z-[100] bg-[#000000]/60 backdrop-blur-xs flex items-center justify-center p-3"
+          style={{ animation: 'finapp-fade-in 0.18s ease-out' }}
+        >
+          <div className="w-full max-w-[360px] bg-[#ffffff] rounded-3xl p-5 shadow-2xl space-y-4 max-h-[90dvh] overflow-y-auto overscroll-contain border border-[#c6c6cd]/25">
             <div className="flex items-center justify-between pb-2 border-b border-[#eff4ff]">
               <div className="flex items-center gap-2">
                 <div
@@ -696,8 +709,9 @@ export const AhorroScreen: React.FC = () => {
                   <span className="text-2xl font-bold text-[#45464d] mr-1">$</span>
                   <input
                     type="number"
-                    step="1000"
-                    min="100"
+                    inputMode="numeric"
+                    step="any"
+                    min="1"
                     required
                     autoFocus
                     placeholder="0"
