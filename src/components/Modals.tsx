@@ -102,8 +102,18 @@ export const Modals: React.FC<ModalsProps> = ({ activeModal, onClose }) => {
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-[#0b1c30]/50 backdrop-blur-sm transition-opacity p-0 sm:p-4"
       onClick={onClose}
     >
+      {/* Animacion propia de la ventana: solo sube y aparece, sin mover el ancho.
+          (Antes usaba la animacion del aviso emergente, que la corria hacia la izquierda.) */}
+      <style>{`
+        @keyframes finapp-modal-up {
+          from { opacity: 0; transform: translateY(24px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
       <div
-        className="w-full max-w-[430px] bg-[#ffffff] rounded-t-2xl sm:rounded-2xl p-5 shadow-2xl animate-toast max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-[430px] bg-[#ffffff] rounded-t-2xl sm:rounded-2xl p-5 shadow-2xl max-h-[90dvh] overflow-y-auto overscroll-contain"
+        style={{ animation: 'finapp-modal-up 0.22s ease-out' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-12 h-1 bg-[#c6c6cd] rounded-full mx-auto mb-4 sm:hidden"></div>
