@@ -1,7 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFinancial } from '../context/FinancialContext';
 import { ExpenseCategory, PaymentMethod } from '../types';
 import { formatCOP } from '../utils/finance';
+
+// Lee el día de pago (1-31) del texto "Día 15 de cada mes"
+const parseDay = (text: string): number => {
+  const m = text.match(/\d{1,2}/);
+  const n = m ? parseInt(m[0], 10) : 15;
+  return Math.min(31, Math.max(1, n));
+};
+
+// Prefijo del modal de edición: el id del modal es "editar-deuda:<id de la obligación>"
+const EDIT_PREFIX = 'editar-deuda:';
 
 interface ModalsProps {
   activeModal: string | null;
@@ -12,6 +22,8 @@ export const Modals: React.FC<ModalsProps> = ({ activeModal, onClose }) => {
   const {
     addExpense,
     addNewDebt,
+    debts,
+    updateDebt,
     windowRuleDays,
     setWindowRuleDays,
     autoCloseOverdue,
@@ -40,6 +52,56 @@ export const Modals: React.FC<ModalsProps> = ({ activeModal, onClose }) => {
   const [simMonto, setSimMonto] = useState<number>(2000000);
   const [simPlazo, setSimPlazo] = useState<number>(12);
   const [simTasa, setSimTasa] = useState<number>(1.8);
+
+  // Edit Debt form state
+  const [editName, setEditName] = useState<string>('');
+  const [editEntity, setEditEntity] = useState<string>('');
+  const [editTotal, setEditTotal] = useState<string>('');
+  const [editInstallments, setEditInstallments] = useState<string>('');
+  const [editInstallmentAmount, setEditInstallmentAmount] = useState<string>('');
+  const [editDay, setEditDay] = useState<string>('15');
+
+  // Obligación que se está editando (si el modal abierto es el de edición)
+  const editDebtId =
+    activeModal && activeModal.startsWith(EDIT_PREFIX) ? activeModal.slice(EDIT_PREFIX.length) : null;
+  const editingDebt = editDebtId ? debts.find((d) => d.id === editDebtId) : undefined;
+
+  // Al abrir el modal de edición, carga los datos actuales de la obligación
+  useEffect(() => {
+    if (!editingDebt) return;
+    setEditName(editingDebt.name);
+    setEditEntity(editingDebt.entity);
+    setEditTotal(String(editingDebt.initialAmount));
+    setEditInstallments(String(editingDebt.totalInstallments));
+    setEditInstallmentAmount(String(editingDebt.installmentAmount));
+    setEditDay(String(parseDay(editingDebt.dueDate)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editDebtId]);
+
+  const handleEditSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDebt) return;
+
+    const total = parseFloat(editTotal);
+    const installments = parseInt(editInstallments, 10);
+    const instAmount = parseFloat(editInstallmentAmount);
+    const day = parseInt(editDay, 10);
+
+    if (!editName.trim() || !(total > 0) || !(instAmount > 0) || !(installments >= 1) || !(day >= 1 && day <= 31)) {
+      alert('Revisa los campos: nombre, monto total, cuotas, valor de la cuota y día de pago (1-31).');
+      return;
+    }
+
+    updateDebt(editingDebt.id, {
+      name: editName.trim(),
+      entity: editEntity.trim() || 'Entidad Financiera',
+      totalAmount: total,
+      totalInstallments: installments,
+      installmentAmount: instAmount,
+      paymentDay: day,
+    });
+    onClose();
+  };
 
   const handleExpenseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -372,6 +434,130 @@ export const Modals: React.FC<ModalsProps> = ({ activeModal, onClose }) => {
               >
                 <span className="material-symbols-outlined text-[18px]">add_task</span>
                 Guardar Obligación
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* MODAL 2B: EDITAR OBLIGACIÓN */}
+        {editingDebt && (
+          <div>
+            <div className="flex justify-between items-start mb-4 border-b border-[#eff4ff] pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-[#dae2fd] flex items-center justify-center text-[#131b2e]">
+                  <span className="material-symbols-outlined text-[20px]">edit</span>
+                </div>
+                <div>
+                  <h3 className="font-bold text-[1.125rem] text-[#0b1c30]">Editar Obligación</h3>
+                  <p className="text-xs text-[#45464d]">Corrige los datos que registraste mal</p>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="text-[#45464d] hover:text-[#0b1c30] p-1 rounded-full hover:bg-[#eff4ff]"
+              >
+                <span className="material-symbols-outlined text-[22px]">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-[#45464d] mb-1">
+                  Nombre o Concepto *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-[#eff4ff] text-[#0b1c30] text-sm outline-none border border-transparent focus:border-[#006c49]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#45464d] mb-1">
+                  Entidad o Acreedor
+                </label>
+                <input
+                  type="text"
+                  value={editEntity}
+                  onChange={(e) => setEditEntity(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#eff4ff] text-[#0b1c30] text-sm outline-none border border-transparent focus:border-[#006c49]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-[#45464d] mb-1">
+                    Monto Total *
+                  </label>
+                  <input
+                    type="number"
+                    step="10000"
+                    min="1"
+                    required
+                    value={editTotal}
+                    onChange={(e) => setEditTotal(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#eff4ff] text-[#0b1c30] text-sm outline-none border border-transparent focus:border-[#006c49]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#45464d] mb-1">
+                    Total Cuotas
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="120"
+                    required
+                    value={editInstallments}
+                    onChange={(e) => setEditInstallments(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#eff4ff] text-[#0b1c30] text-sm outline-none border border-transparent focus:border-[#006c49]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-[#45464d] mb-1">
+                    Valor Cuota *
+                  </label>
+                  <input
+                    type="number"
+                    step="100"
+                    min="1"
+                    required
+                    value={editInstallmentAmount}
+                    onChange={(e) => setEditInstallmentAmount(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#eff4ff] text-[#0b1c30] text-sm outline-none border border-transparent focus:border-[#006c49]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#45464d] mb-1">
+                    Día de Pago (1-31)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="31"
+                    required
+                    value={editDay}
+                    onChange={(e) => setEditDay(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#eff4ff] text-[#0b1c30] text-sm outline-none border border-transparent focus:border-[#006c49]"
+                  />
+                </div>
+              </div>
+
+              <p className="text-[11px] text-[#45464d]">
+                Si cambias el monto total, el saldo pendiente se recalcula conservando lo que ya llevas pagado.
+              </p>
+
+              <button
+                type="submit"
+                className="w-full h-12 bg-[#006c49] text-[#ffffff] font-bold text-sm rounded-xl active:scale-[0.985] transition-all shadow-sm flex items-center justify-center gap-2 mt-2"
+              >
+                <span className="material-symbols-outlined text-[18px]">save</span>
+                Guardar Cambios
               </button>
             </form>
           </div>
