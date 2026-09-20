@@ -50,6 +50,18 @@ interface FinancialContextType {
     installmentAmount: number;
     paymentDay: number;
   }) => void;
+  deleteDebt: (debtId: string) => void;
+  updateDebt: (
+    debtId: string,
+    data: {
+      name: string;
+      entity: string;
+      totalAmount: number;
+      totalInstallments: number;
+      installmentAmount: number;
+      paymentDay: number;
+    }
+  ) => void;
   saveSimulationAsDebt: (conceptName?: string) => void;
   addSavingMeta: (newGoal: {
     title: string;
@@ -367,6 +379,75 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     showNotification('¡Obligación Creada!', `${newDebt.name} añadida a tus compromisos activos.`);
   };
 
+  // Elimina una obligacion. Si ya estaba pagada este mes, su cuota tambien se resta de lo
+  // "pagado en el mes", y el compromiso mensual baja por el valor de su cuota.
+  // El saldo no se toca: hoy la app no lleva el registro exacto de lo que descontó cada pago.
+  const deleteDebt = (debtId: string) => {
+    const debt = debts.find((d) => d.id === debtId);
+    if (!debt) return;
+
+    setDebts((prev) => prev.filter((d) => d.id !== debtId));
+    setCompromisoTotal((c) => Math.max(0, c - debt.installmentAmount));
+
+    if (debt.paidThisMonth) {
+      setPagadoMes((p) => Math.max(0, p - debt.installmentAmount));
+    }
+
+    showNotification('Obligación eliminada', `${debt.name} fue eliminada de tus compromisos.`);
+  };
+
+  // Edita una obligacion que NO esta pagada este mes (si esta pagada, primero se deshace el pago).
+  // Lo ya amortizado se conserva: al cambiar el monto total, el saldo se recalcula con eso.
+  const updateDebt = (
+    debtId: string,
+    data: {
+      name: string;
+      entity: string;
+      totalAmount: number;
+      totalInstallments: number;
+      installmentAmount: number;
+      paymentDay: number;
+    }
+  ) => {
+    const old = debts.find((d) => d.id === debtId);
+    if (!old) return;
+
+    if (old.paidThisMonth) {
+      showNotification('Primero deshaz el pago', 'Esta obligación está pagada este mes. Pulsa "Deshacer" y luego edítala.');
+      return;
+    }
+
+    const amortizedAmount = Math.max(0, old.initialAmount - old.remainingBalance);
+    const newRemaining = Math.max(0, data.totalAmount - amortizedAmount);
+    const newPct =
+      data.totalAmount > 0
+        ? Math.min(100, Math.round(((data.totalAmount - newRemaining) / data.totalAmount) * 1000) / 10)
+        : 0;
+
+    setDebts((prev) =>
+      prev.map((d) =>
+        d.id === debtId
+          ? {
+              ...d,
+              name: data.name,
+              entity: data.entity || 'Entidad Financiera',
+              totalInstallments: data.totalInstallments,
+              currentInstallment: Math.min(d.currentInstallment, data.totalInstallments),
+              installmentAmount: data.installmentAmount,
+              initialAmount: data.totalAmount,
+              remainingBalance: newRemaining,
+              amortizedPct: newPct,
+              dueDate: `Día ${data.paymentDay} de cada mes`,
+              paymentWindowNotice: `Habilitado ${d.ruleDaysBefore ?? windowRuleDays} días antes del corte (Día ${data.paymentDay})`,
+            }
+          : d
+      )
+    );
+
+    setCompromisoTotal((c) => Math.max(0, c + (data.installmentAmount - old.installmentAmount)));
+    showNotification('Obligación actualizada', `${data.name} se guardó con los cambios.`);
+  };
+
   const saveSimulationAsDebt = (conceptName?: string) => {
     const simResult = calculateSimulation(simulationParams);
     const name = conceptName || `Crédito Simulado ($${(simulationParams.amount / 1000000).toFixed(1)}M)`;
@@ -567,6 +648,8 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
         toggleExpense,
         deleteExpense,
         addNewDebt,
+        deleteDebt,
+        updateDebt,
         saveSimulationAsDebt,
         addSavingMeta,
         updateSavingMeta,
