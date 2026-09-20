@@ -7,7 +7,6 @@ import { Modals } from './components/Modals';
 import { InicioScreen } from './components/screens/InicioScreen';
 import { DeudasScreen } from './components/screens/DeudasScreen';
 import { AhorroScreen } from './components/screens/AhorroScreen';
-import { CalculadoraScreen } from './components/screens/CalculadoraScreen';
 import { GastosScreen } from './components/screens/GastosScreen';
 
 const MainLayout: React.FC = () => {
@@ -34,7 +33,6 @@ const MainLayout: React.FC = () => {
           {currentTab === 'inicio' && <InicioScreen onOpenModal={openModal} />}
           {currentTab === 'deudas' && <DeudasScreen onOpenModal={openModal} />}
           {currentTab === 'ahorro' && <AhorroScreen />}
-          {currentTab === 'calculadora' && <CalculadoraScreen />}
           {currentTab === 'gastos' && <GastosScreen />}
         </main>
 
