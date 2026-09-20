@@ -6,6 +6,11 @@ interface InicioScreenProps {
   onOpenModal: (modalId: string) => void;
 }
 
+const MESES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+
 export const InicioScreen: React.FC<InicioScreenProps> = ({ onOpenModal }) => {
   const {
     balance,
@@ -16,7 +21,6 @@ export const InicioScreen: React.FC<InicioScreenProps> = ({ onOpenModal }) => {
     debts,
     servicios,
     expenses,
-    savings,
     markDebtPaid,
     payService,
     deleteExpense,
@@ -24,13 +28,16 @@ export const InicioScreen: React.FC<InicioScreenProps> = ({ onOpenModal }) => {
     setCurrentTab,
   } = useFinancial();
 
+  const mesActual = MESES[new Date().getMonth()];
+
   // Progress calculations
   const pctCubierto = compromisoTotal > 0 ? Math.min(100, Math.round((pagadoMes / compromisoTotal) * 100)) : 0;
   const pendiente = Math.max(0, compromisoTotal - pagadoMes);
 
-  // Available dues to pay this month
+  // Cuotas que se pueden pagar este mes: las obligaciones activas y las ya pagadas este mes
+  // (las que esperan su ventana de pago o están finalizadas no aparecen aquí)
   const availableDebts = debts.filter(
-    (d) => d.id === 'bancolombia-prestamo' || d.id === 'visa-clasica' || d.id === 'bancolombia-libre'
+    (d) => d.status === 'active' || (d.paidThisMonth && d.status !== 'closed')
   );
   const pendingDebtsCount = availableDebts.filter((d) => !d.paidThisMonth).length;
 
@@ -44,7 +51,7 @@ export const InicioScreen: React.FC<InicioScreenProps> = ({ onOpenModal }) => {
     <div className="flex flex-col w-full gap-4 pb-10">
       {/* Privacy indicator toast banner */}
       <div className="flex items-center gap-2 bg-[#eff4ff] px-3.5 py-2.5 rounded-xl text-[#45464d] shadow-xs border border-[#c6c6cd]/20">
-        <span className="material-symbols-outlined text-[18px] text-[#006c49]">encrypted</span>
+        <span className="material-symbols-outlined text-[18px] text-[#006c49]">smartphone</span>
         <span className="text-xs font-medium truncate">Datos guardados localmente en tu dispositivo</span>
         <span
           className="material-symbols-outlined text-[16px] text-[#006c49] ml-auto flex-shrink-0"
@@ -63,7 +70,7 @@ export const InicioScreen: React.FC<InicioScreenProps> = ({ onOpenModal }) => {
             Balance Estimado Disponible
           </span>
           <span className="text-xs bg-[#ffffff]/10 text-[#ffffff] px-2.5 py-0.5 rounded-full flex items-center gap-1.5 font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#6ffbbe]"></span> Octubre
+            <span className="w-1.5 h-1.5 rounded-full bg-[#6ffbbe]"></span> {mesActual}
           </span>
         </div>
 
@@ -139,15 +146,6 @@ export const InicioScreen: React.FC<InicioScreenProps> = ({ onOpenModal }) => {
 
         <button
           type="button"
-          onClick={() => setCurrentTab('calculadora')}
-          className="flex-shrink-0 flex items-center gap-1.5 bg-[#e5eeff] hover:bg-[#dce9ff] text-[#0b1c30] px-3.5 py-2 rounded-xl shadow-xs active:scale-95 transition-transform"
-        >
-          <span className="material-symbols-outlined text-[18px] text-[#45464d]">calculate</span>
-          <span className="text-xs font-semibold whitespace-nowrap">Simular Crédito</span>
-        </button>
-
-        <button
-          type="button"
           onClick={() => onOpenModal('anadir-deuda')}
           className="flex-shrink-0 flex items-center gap-1.5 bg-[#e5eeff] hover:bg-[#dce9ff] text-[#0b1c30] px-3.5 py-2 rounded-xl shadow-xs active:scale-95 transition-transform"
         >
@@ -174,9 +172,19 @@ export const InicioScreen: React.FC<InicioScreenProps> = ({ onOpenModal }) => {
                 : 'bg-[#6ffbbe]/50 text-[#005236]'
             }`}
           >
-            {pendingDebtsCount === 0 ? 'Al día ✓' : `${pendingDebtsCount} por vencer`}
+            {availableDebts.length === 0
+              ? 'Sin cuotas'
+              : pendingDebtsCount === 0
+              ? 'Al día ✓'
+              : `${pendingDebtsCount} por vencer`}
           </span>
         </div>
+
+        {availableDebts.length === 0 && (
+          <div className="bg-[#ffffff] rounded-2xl p-5 text-center text-xs text-[#45464d] border border-[#c6c6cd]/20">
+            Aún no tienes cuotas por pagar. Registra tu primera obligación con «Añadir Deuda».
+          </div>
+        )}
 
         {/* Render Installment Cards */}
         {availableDebts.map((debt) => {
